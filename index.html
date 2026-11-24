@@ -89,7 +89,12 @@
         }
 
         .subject-btn:active,
-        .edit-btn:active {
+        .edit-btn:active,
+        .subject-select-btn:active,
+        .close-picker:active,
+        .action-btn:active,
+        .close-action:active,
+        .btn-clear-all:active {
             transform: scale(0.98);
         }
 
@@ -120,6 +125,97 @@
             color: #666;
             margin-top: 8px;
             line-height: 1.5;
+        }
+
+        .danger-zone {
+            text-align: center;
+            margin-top: 14px;
+        }
+
+        .btn-clear-all {
+            width: 100%;
+            max-width: 260px;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background: #d9534f;
+            color: #fff;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .btn-clear-all:hover {
+            background: #c9302c;
+        }
+
+        .picker-overlay,
+        .action-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            padding: 16px;
+        }
+
+        .picker-box,
+        .action-box {
+            width: 100%;
+            max-width: 520px;
+            background: #fff;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+        }
+
+        .picker-box h2,
+        .action-box h2 {
+            margin: 0 0 12px 0;
+            text-align: center;
+            font-size: 18px;
+        }
+
+        .subject-list,
+        .action-list {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .subject-select-btn,
+        .action-btn {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f9f9f9;
+            padding: 12px 8px;
+            font-size: 12px;
+            cursor: pointer;
+            touch-action: manipulation;
+            min-height: 54px;
+            color: #000;
+            line-height: 1.3;
+            word-break: break-word;
+        }
+
+        .action-btn.delete {
+            background: #ffe5e5;
+            border-color: #f5b5b5;
+        }
+
+        .close-picker,
+        .close-action {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            background: #666;
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
         }
 
         @media screen and (min-width: 768px) {
@@ -162,6 +258,19 @@
             .hint {
                 font-size: 12px;
             }
+
+            .picker-box h2,
+            .action-box h2 {
+                font-size: 20px;
+            }
+
+            .subject-select-btn,
+            .action-btn,
+            .close-picker,
+            .close-action,
+            .btn-clear-all {
+                font-size: 14px;
+            }
         }
     </style>
 </head>
@@ -169,7 +278,7 @@
     <h1>時間割</h1>
     <h3>
         タップ：出欠確認 / 新規登録<br>
-        右上の ✎：授業名の編集・削除
+        右上の ✎：授業名の変更・削除
     </h3>
 
     <div class="table-wrap">
@@ -238,8 +347,34 @@
     </div>
 
     <div class="hint">
-        ※ コマ本体を押すと出欠確認、新規登録もできます<br>
-        ※ ✎ ボタンで授業名の編集・削除ができます
+        ※ コマ本体を押すと出欠詳細を開きます<br>
+        ※ 空欄なら授業を登録できます<br>
+        ※ ✎ ボタンで授業名の変更・削除ができます
+    </div>
+
+    <div class="danger-zone">
+        <button type="button" class="btn-clear-all" onclick="clearAllSubjects()">
+            時間割を一括削除
+        </button>
+    </div>
+
+    <div id="subject-picker" class="picker-overlay">
+        <div class="picker-box">
+            <h2 id="picker-title">授業を選択</h2>
+            <div id="subject-list" class="subject-list"></div>
+            <button type="button" class="close-picker" onclick="closeSubjectPicker()">キャンセル</button>
+        </div>
+    </div>
+
+    <div id="action-menu" class="action-overlay">
+        <div class="action-box">
+            <h2 id="action-title">操作を選択</h2>
+            <div class="action-list">
+                <button type="button" class="action-btn" onclick="changeSubjectFromMenu()">授業を変更</button>
+                <button type="button" class="action-btn delete" onclick="deleteSubjectFromMenu()">削除</button>
+            </div>
+            <button type="button" class="close-action" onclick="closeActionMenu()">キャンセル</button>
+        </div>
     </div>
 
     <script>
@@ -248,6 +383,26 @@
             '#fce4ec', '#f0f4c3', '#e0f2f1', '#e8eaf6', '#ede7f6',
             '#afeeee', '#f8f8ff'
         ];
+
+        const subjectData = {
+            '国語': ['現代の国語', '言語文化', '論理国語', '文学国語', '古典探求', '現代文（入試演習）', '古典（入試演習）', '小論文演習'],
+            '数学': ['数学Ⅰ', '数学A', '数学Ⅱ', '数学B', '数学Ⅲ', '数学C', '数学Ⅰ（入試演習）', '数学Ⅱ（入試演習）', '数学発展演習'],
+            '英語': ['英語コミュニケーションⅠ', '英語コミュニケーションⅡ', '論理・表現Ⅰ', '論理・表現Ⅱ', '論理・表現Ⅲ', '総合英語Ⅰ', 'フランス語'],
+            '理科': ['物理基礎', '化学基礎', '生物基礎', '地学基礎', '物理', '化学', '生物', '地学', '物理演習', '化学演習', '生物演習', '地学演習'],
+            '社会': ['歴史総合', '地理総合', '日本史探求', '世界史探求', '公共', '倫理', '政治・経済'],
+            '情報': ['情報Ⅰ', '情報Ⅱ', '情報産業と社会', '情報の表現と管理', '情報デザイン', 'プログラミング基礎', '情報基礎実習', '情報テクノロジー', '情報セキュリティ', '情報システムのプログラミング', 'ネットワークシステム', 'データベース', 'コンテンツの制作と発信', 'コンピューターグラフィックス', '情報コンテンツ実習', 'メディアとサ－ビス', '情報実習', '課題研究', '課題研究（発展）'],
+            '体育': ['体育館', 'テニス', '水泳', '卓球', 'ダンス', '武道', 'ストレッチ'],
+            '保健': ['保健α', '保健β'],
+            '音楽': ['音楽Ⅰ', '音楽Ⅱ'],
+            '美術': ['美術Ⅰ', '美術Ⅱ'],
+            '工芸': ['工芸Ⅰ', '工芸Ⅱ'],
+            '書道': ['書道Ⅰ', '書道Ⅱ'],
+            '家庭科': ['家庭総合α', '家庭総合β', 'ファッション造形基礎', 'フードデザイン'],
+            'ホームルーム': ['ホームルーム']
+        };
+
+        let currentTargetId = null;
+        let actionTargetId = null;
 
         function getSubjectColor(subjectName) {
             if (!subjectName) return '#ffffff';
@@ -263,17 +418,10 @@
             const savedName = localStorage.getItem(id) || '';
 
             if (!savedName) {
-                const nameInput = prompt('授業名を入力してください：');
-                if (nameInput !== null) {
-                    const trimmed = nameInput.trim();
-                    if (trimmed) {
-                        localStorage.setItem(id, trimmed);
-                        refreshAllButtons();
-                    }
-                }
+                openSubjectPicker(id);
             } else {
                 const pageUrl = `attendance.html?subject=${encodeURIComponent(savedName)}`;
-                window.open(pageUrl, '_blank');
+                window.location.href = pageUrl;
             }
         }
 
@@ -281,40 +429,177 @@
             const savedName = localStorage.getItem(id) || '';
 
             if (!savedName) {
-                const nameInput = prompt('このコマは未登録です。\n新しい授業名を入力してください：');
-                if (nameInput !== null) {
-                    const trimmed = nameInput.trim();
-                    if (trimmed) {
-                        localStorage.setItem(id, trimmed);
-                        refreshAllButtons();
-                    }
-                }
+                openSubjectPicker(id);
                 return;
             }
 
-            const nameInput = prompt(
-                `【${savedName}】の編集\n新しい授業名を入力してください。\n（空欄にしてOKを押すと消去されます）`,
-                savedName
-            );
+            actionTargetId = id;
+            document.getElementById('action-title').textContent = `【${savedName}】の操作`;
+            document.getElementById('action-menu').style.display = 'flex';
+        }
 
-            if (nameInput !== null) {
-                const trimmedInput = nameInput.trim();
+        function closeActionMenu() {
+            document.getElementById('action-menu').style.display = 'none';
+            actionTargetId = null;
+        }
 
-                if (trimmedInput === "") {
-                    localStorage.removeItem(id);
-                    localStorage.removeItem(`att-absent-${savedName}`);
-                } else {
-                    const oldAbsent = localStorage.getItem(`att-absent-${savedName}`);
-                    localStorage.setItem(id, trimmedInput);
+        function changeSubjectFromMenu() {
+            if (!actionTargetId) return;
+            const targetId = actionTargetId;
+            closeActionMenu();
+            openSubjectPicker(targetId);
+        }
 
-                    if (oldAbsent !== null && trimmedInput !== savedName) {
-                        localStorage.setItem(`att-absent-${trimmedInput}`, oldAbsent);
-                        localStorage.removeItem(`att-absent-${savedName}`);
-                    }
-                }
+        function deleteSubjectFromMenu() {
+            if (!actionTargetId) return;
 
+            const savedName = localStorage.getItem(actionTargetId) || '';
+            if (!savedName) {
+                closeActionMenu();
+                return;
+            }
+
+            if (confirm(`【${savedName}】を削除しますか？`)) {
+                localStorage.removeItem(actionTargetId);
+                localStorage.removeItem(`att-absent-${savedName}`);
+                localStorage.removeItem(`att-detail-absent-${savedName}`);
+                localStorage.removeItem(`att-detail-plus-${savedName}`);
+                localStorage.removeItem(`att-detail-minus-${savedName}`);
                 refreshAllButtons();
             }
+
+            closeActionMenu();
+        }
+
+        function clearAllSubjects() {
+            if (!confirm('時間割に登録された授業と出欠記録をすべて削除しますか？')) {
+                return;
+            }
+
+            document.querySelectorAll('.subject-btn').forEach((btn) => {
+                const subjectName = localStorage.getItem(btn.id);
+
+                if (subjectName) {
+                    localStorage.removeItem(`att-absent-${subjectName}`);
+                    localStorage.removeItem(`att-detail-absent-${subjectName}`);
+                    localStorage.removeItem(`att-detail-plus-${subjectName}`);
+                    localStorage.removeItem(`att-detail-minus-${subjectName}`);
+                }
+
+                localStorage.removeItem(btn.id);
+            });
+
+            refreshAllButtons();
+            alert('時間割をすべて削除しました。');
+        }
+
+        function openSubjectPicker(id) {
+            currentTargetId = id;
+            showMainSubjects();
+            document.getElementById('subject-picker').style.display = 'flex';
+        }
+
+        function closeSubjectPicker() {
+            document.getElementById('subject-picker').style.display = 'none';
+            currentTargetId = null;
+        }
+
+        function showMainSubjects() {
+            const listArea = document.getElementById('subject-list');
+            const title = document.getElementById('picker-title');
+
+            title.textContent = '教科を選択';
+            listArea.innerHTML = '';
+
+            Object.keys(subjectData).forEach((subject) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'subject-select-btn';
+                btn.textContent = subject;
+                btn.style.backgroundColor = getSubjectColor(subject);
+
+                btn.addEventListener('click', () => {
+                    const childList = subjectData[subject];
+
+                    if (Array.isArray(childList) && childList.length > 0) {
+                        showSubSubjects(subject);
+                    } else {
+                        saveSubjectToCell(subject);
+                    }
+                });
+
+                listArea.appendChild(btn);
+            });
+        }
+
+        function showSubSubjects(parentSubject) {
+            const listArea = document.getElementById('subject-list');
+            const title = document.getElementById('picker-title');
+            const childList = subjectData[parentSubject] || [];
+
+            title.textContent = `${parentSubject} の授業を選択`;
+            listArea.innerHTML = '';
+
+            childList.forEach((subSubject) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'subject-select-btn';
+                btn.textContent = subSubject;
+                btn.style.backgroundColor = getSubjectColor(subSubject);
+
+                btn.addEventListener('click', () => {
+                    const fullName = `${parentSubject}／${subSubject}`;
+                    saveSubjectToCell(fullName);
+                });
+
+                listArea.appendChild(btn);
+            });
+
+            const backBtn = document.createElement('button');
+            backBtn.type = 'button';
+            backBtn.className = 'subject-select-btn';
+            backBtn.textContent = '← 戻る';
+            backBtn.style.backgroundColor = '#eeeeee';
+
+            backBtn.addEventListener('click', () => {
+                showMainSubjects();
+            });
+
+            listArea.appendChild(backBtn);
+        }
+
+        function saveSubjectToCell(newName) {
+            if (!currentTargetId) return;
+
+            const oldName = localStorage.getItem(currentTargetId) || '';
+            const oldAbsent = oldName ? localStorage.getItem(`att-absent-${oldName}`) : null;
+            const oldDetailAbsent = oldName ? localStorage.getItem(`att-detail-absent-${oldName}`) : null;
+            const oldDetailPlus = oldName ? localStorage.getItem(`att-detail-plus-${oldName}`) : null;
+            const oldDetailMinus = oldName ? localStorage.getItem(`att-detail-minus-${oldName}`) : null;
+
+            localStorage.setItem(currentTargetId, newName);
+
+            if (oldName && oldName !== newName) {
+                if (oldAbsent !== null) {
+                    localStorage.setItem(`att-absent-${newName}`, oldAbsent);
+                    localStorage.removeItem(`att-absent-${oldName}`);
+                }
+                if (oldDetailAbsent !== null) {
+                    localStorage.setItem(`att-detail-absent-${newName}`, oldDetailAbsent);
+                    localStorage.removeItem(`att-detail-absent-${oldName}`);
+                }
+                if (oldDetailPlus !== null) {
+                    localStorage.setItem(`att-detail-plus-${newName}`, oldDetailPlus);
+                    localStorage.removeItem(`att-detail-plus-${oldName}`);
+                }
+                if (oldDetailMinus !== null) {
+                    localStorage.setItem(`att-detail-minus-${newName}`, oldDetailMinus);
+                    localStorage.removeItem(`att-detail-minus-${oldName}`);
+                }
+            }
+
+            closeSubjectPicker();
+            refreshAllButtons();
         }
 
         function refreshAllButtons() {
@@ -364,6 +649,20 @@
                     e.stopPropagation();
                     editCell(btn.dataset.id);
                 });
+            });
+
+            const picker = document.getElementById('subject-picker');
+            picker.addEventListener('click', (e) => {
+                if (e.target === picker) {
+                    closeSubjectPicker();
+                }
+            });
+
+            const actionMenu = document.getElementById('action-menu');
+            actionMenu.addEventListener('click', (e) => {
+                if (e.target === actionMenu) {
+                    closeActionMenu();
+                }
             });
 
             refreshAllButtons();
